@@ -6,6 +6,7 @@ enum EvalResult:
 
 object Evaluator:
 
+  // Leftmost-outermost: head redex first, then inside abstractions
   def normalOrderStep(t: Term): Option[Term] = t match
     case App(Abs(param, body), arg) =>
       Some(Term.substitute(body, param, arg))
@@ -17,6 +18,7 @@ object Evaluator:
       normalOrderStep(body).map(Abs(param, _))
     case Var(_) => None
 
+  // Rightmost-innermost: arguments reduced before the function
   def applicativeOrderStep(t: Term): Option[Term] = t match
     case App(func, arg) =>
       applicativeOrderStep(arg)
@@ -30,6 +32,7 @@ object Evaluator:
       applicativeOrderStep(body).map(Abs(param, _))
     case Var(_) => None
 
+  // Reduces argument before function, never steps under abstractions
   def callByValueStep(t: Term): Option[Term] = t match
     case App(func, arg) =>
       callByValueStep(arg)

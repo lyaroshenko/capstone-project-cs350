@@ -1,15 +1,5 @@
 package lambda
 
-/**
- * Interactive REPL for the lambda calculus interpreter.
- *
- * Usage: sbt run
- *
- * Commands: <term> -- parse and evaluate using current strategy and step limit :strategy normal -- switch to normal
- * order (default) :strategy applicative :strategy cbv -- call-by-value :steps <n> -- set the step limit (default: 1000)
- * :free <term> -- show free variables of a term without evaluating :parse <term> -- show the parsed AST without
- * evaluating :help -- show this help :quit -- exit
- */
 object Main:
 
   def main(args: Array[String]): Unit =
@@ -17,8 +7,6 @@ object Main:
     println("Type :help for available commands, :quit to exit.")
     println()
     repl(Strategy.NormalOrder, maxSteps = 1000)
-
-  // ── REPL loop ─────────────────────────────────────────────────
 
   @annotation.tailrec
   private def repl(strategy: Strategy, maxSteps: Int): Unit =
@@ -73,8 +61,6 @@ object Main:
           runEval(input, strategy, maxSteps)
           repl(strategy, maxSteps)
 
-  // ── Command handlers ──────────────────────────────────────────
-
   private def runEval(input: String, strategy: Strategy, maxSteps: Int): Unit =
     try
       val term   = Parser.parse(input)
@@ -103,13 +89,12 @@ object Main:
   private def runParse(input: String): Unit =
     try
       val term = Parser.parse(input)
-      println(s"  AST: ${term}")
+      println(s"  AST: $term")
     catch
       case Parser.ParseError(msg) => println(s"  Parse error: $msg")
       case e: Exception           => println(s"  Error: ${e.getMessage}")
 
-  // ── Pretty printer ────────────────────────────────────────────
-
+  // Parenthesises subterms only where needed to disambiguate
   def pretty(term: Term): String =
     term match
       case Var(name)        => name
@@ -123,8 +108,6 @@ object Main:
           case Abs(_, _) => s"(${pretty(arg)})"
           case _         => pretty(arg)
         s"$lhs $rhs"
-
-  // ── Helpers ───────────────────────────────────────────────────
 
   private def strategyName(s: Strategy): String = s match
     case Strategy.NormalOrder      => "normal"

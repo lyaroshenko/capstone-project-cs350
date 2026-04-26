@@ -22,10 +22,12 @@ object Term:
     case App(func, arg) =>
       App(substitute(func, x, n), substitute(arg, x, n))
     case Abs(param, body) =>
-      if param == x then term
-      else if !freeVars(body).contains(x) then term
+      if param == x then term                       // x rebound, no substitution needed
+      else if !freeVars(body).contains(x) then term // x not free in body, nothing to substitute
       else if !freeVars(n).contains(param) then Abs(param, substitute(body, x, n))
       else
+        // param is free in n — substituting naively would capture it.
+        // alpha-convert: rename param to a fresh variable before substituting.
         val z = freshVar(freeVars(n) ++ freeVars(body))
         Abs(z, substitute(substitute(body, param, Var(z)), x, n))
 
