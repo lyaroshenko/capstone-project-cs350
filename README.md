@@ -1,1 +1,226 @@
-# capstone-project-cs350
+# Lambda Calculus Interpreter in Scala 3 | Capstone Project | Functional Programming CS350
+
+## Group Members
+
+- **Mykhailo Rosliakov** — Core engine (Term model, free variables, substitution, beta-reduction)
+- **Illia Hrynkiv** — Reduction strategies (normal order, applicative order, call-by-value) and step-limit
+- **Liliia Yaroshenko** — Parser, test suite, README
+
+> **AI Usage:** This project was developed with the assistance of an AI tool.
+> The links are included in `AI_LOG.md` in this repository.
+> All group members have read, understood, and can explain every part of the submitted code.
+
+---
+
+## Overview
+
+This is a purely functional interpreter for the **untyped lambda calculus**, written in **Scala 3**. It supports:
+
+- An immutable lambda-term model (variables, abstractions, applications)
+- Free-variable computation
+- Capture-avoiding substitution with alpha-conversion
+- Beta-reduction
+- Three configurable reduction strategies: normal order, applicative order, and call-by-value
+- A step limit to safely handle non-terminating terms
+- A hand-written recursive-descent parser for textual lambda terms
+- An interactive REPL
+
+The entire interpreter is written in a purely functional style — no `var`, no mutable state, no in-place updates.
+
+---
+
+## Project Structure
+
+```
+src/
+└── main/scala/lambda/
+    ├── Term.scala        # Term model, free variables, substitution, beta-reduction
+    ├── Strategy.scala    # Reduction strategy enum
+    ├── Evaluator.scala   # Single-step functions and full evaluation loop
+    ├── Parser.scala      # Recursive-descent parser
+    └── Main.scala        # Interactive REPL entry point
+
+src/
+└── test/scala/lambda/
+    └── LambdaTests.scala # Full automated test suite (ScalaTest)
+```
+
+---
+
+## Building and Running
+
+### Prerequisites
+
+- **Java 11+**
+- **sbt 1.9+** (Scala Build Tool)
+
+### Run the REPL
+
+```bash
+sbt run
+```
+
+This starts an interactive session. You will see a prompt like:
+
+```
+Lambda Calculus Interpreter
+Type :help for available commands, :quit to exit.
+
+[normal, steps=1000] >
+```
+
+### Run the Tests
+
+```bash
+sbt test
+```
+
+---
+
+## Concrete Syntax
+
+The parser accepts an ASCII lambda calculus syntax:
+
+```
+term  ::= abs | app
+abs   ::= '\' ident+ '.' term      -- multi-param sugar
+app   ::= atom { atom }            -- left-associative juxtaposition
+atom  ::= ident | '(' term ')'
+ident ::= [a-zA-Z][a-zA-Z0-9_]*
+```
+
+| Construct | Syntax | Example |
+|---|---|---|
+| Variable | identifier | `x`, `foo`, `x1` |
+| Abstraction | `\param. body` | `\x. x` |
+| Multi-param (sugar) | `\x y z. body` | expands to `\x.\y.\z. body` |
+| Application | juxtaposition | `f x y` means `(f x) y` |
+| Grouping | `(term)` | `(\x. x) y` |
+
+Application is **left-associative** and abstraction bodies extend **as far right as possible**.
+
+---
+
+## REPL Commands
+
+| Command | Description |
+|---|---|
+| `<term>` | Parse and evaluate a lambda term |
+| `:strategy normal` | Switch to normal-order reduction (default) |
+| `:strategy applicative` | Switch to applicative-order reduction |
+| `:strategy cbv` | Switch to call-by-value reduction |
+| `:steps <n>` | Set the maximum reduction step limit |
+| `:free <term>` | Show the free variables of a term |
+| `:parse <term>` | Show the parsed AST without evaluating |
+| `:help` | Show available commands |
+| `:quit` | Exit the interpreter |
+
+### Example Session
+
+```
+[normal, steps=1000] > (\x. x) y
+  = y
+  (normal form reached in 1 step)
+
+[normal, steps=1000] > \x y. x
+  = \x. \y. x
+  (normal form reached in 0 steps)
+
+[normal, steps=1000] > :strategy cbv
+Strategy set to: cbv
+
+[cbv, steps=1000] > (\x. x) (\y. y)
+  = \y. y
+  (normal form reached in 1 step)
+
+[cbv, steps=1000] > :steps 10
+Step limit set to: 10
+
+[cbv, steps=10] > (\x. x x) (\x. x x)
+  = (\x. x x) (\x. x x)
+  (stopped after 10 steps — step limit reached, not a normal form)
+
+[cbv, steps=10] > :free \x. x y
+  Free variables: y
+
+[cbv, steps=10] > :parse \f x. f (f x)
+  AST: Abs(f,Abs(x,App(Var(f),App(Var(f),Var(x)))))
+```
+
+---
+
+## Implementation Notes
+
+### Term Model (`Term.scala`)
+
+Lambda terms are represented as a sealed trait with three case classes:
+
+```scala
+sealed trait Term
+case class Var(name: String)              extends Term  // variable
+case class Abs(param: String, body: Term) extends Term  // abstraction
+case class App(func: Term, arg: Term)     extends Term  // application
+```
+
+### Substitution (`Term.substitute`)
+
+Implements capture-avoiding substitution following the standard seven rules. The key cases are:
+
+- If the abstraction rebinds the substituted variable, the term is returned unchanged.
+- If the variable being substituted is not free in the body, the term is returned unchanged.
+- If the bound variable would not be captured, substitution proceeds directly.
+- If capture would occur, **alpha-conversion** renames the bound variable to a fresh name before substituting.
+
+Fresh names are generated by `Term.freshVar`, which returns `z`, `z0`, `z1`, … skipping any name that appears free in the relevant terms.
+
+### Reduction Strategies (`Evaluator.scala`)
+
+Each strategy is a function `Term => Option[Term]` returning `None` at normal form:
+
+- **Normal order** — reduces the leftmost-outermost redex first; steps under lambda bodies.
+- **Applicative order** — reduces arguments to normal form before applying; steps under lambda bodies.
+- **Call-by-value** — reduces arguments first, but only fires the beta rule when the argument is a *value* (an abstraction or variable); does **not** step under lambda bodies.
+
+### Step Limit
+
+`Evaluator.evaluate` runs the chosen strategy in a tail-recursive loop and returns one of:
+
+```scala
+EvalResult.Done(term, steps)             // normal form reached
+EvalResult.StepLimitReached(term, steps) // limit hit before normal form
+```
+
+The default limit is 1000 and is configurable via `:steps <n>` in the REPL.
+
+### Parser (`Parser.scala`)
+
+A hand-written recursive-descent parser with a separate tokenizer. It handles:
+
+- Single and multi-parameter abstractions (desugared right-to-left)
+- Left-associative application
+- Parenthesised sub-terms
+- Informative `ParseError` messages for unexpected tokens or missing structure
+
+---
+
+## Tests
+
+The test suite in `LambdaTests.scala` covers:
+
+| Area | What is tested |
+|---|---|
+| `freeVars` | Var, open/closed Abs, App, nested binders |
+| `freshVar` | Empty avoid set, progressively filled avoid sets |
+| `substitute` | All seven substitution rules, including alpha-renaming to avoid capture |
+| `betaReduce` | Redex, non-redex App, self-application, constant function |
+| `normalOrderStep` | Outermost-first priority, stepping in func/arg/body positions, normal forms |
+| `applicativeOrderStep` | Argument-first priority, stepping under Abs, normal forms |
+| `callByValueStep` | Argument reduction, value check before firing beta, no stepping under Abs |
+| `isValue` | Abs, Var, App |
+| `evaluate` | All three strategies end-to-end, step counting, `StepLimitReached` on Ω |
+
+Run with:
+
+```bash
+sbt test
+```
