@@ -1,30 +1,23 @@
 package lambda
 
-/** Hand-written recursive-descent parser for lambda terms.
+/**
+ * Hand-written recursive-descent parser for lambda terms.
  *
- * ─────────────────────────────────────────────────────────────
- * Concrete Syntax
+ * ───────────────────────────────────────────────────────────── Concrete Syntax
  * ─────────────────────────────────────────────────────────────
  *
- *   term  ::= abs | app
- *   abs   ::= '\' ident+ '.' term      -- multi-param sugar
- *   app   ::= atom { atom }            -- left-associative juxtaposition
- *   atom  ::= ident | '(' term ')'
- *   ident ::= [a-zA-Z][a-zA-Z0-9_]*
+ * term ::= abs | app abs ::= '\' ident+ '.' term -- multi-param sugar app ::= atom { atom } -- left-associative
+ * juxtaposition atom ::= ident | '(' term ')' ident ::= [a-zA-Z][a-zA-Z0-9_]*
  *
  * Key rules:
- *   - Abstraction uses backslash:  \x. body
- *   - Multiple params are sugar:   \x y z. body  ≡  \x.\y.\z. body
- *   - Application is left-assoc:  f g h          ≡  (f g) h
+ *   - Abstraction uses backslash: \x. body
+ *   - Multiple params are sugar: \x y z. body ≡ \x.\y.\z. body
+ *   - Application is left-assoc: f g h ≡ (f g) h
  *   - Abstraction body extends as far right as possible.
  *   - Whitespace (spaces, tabs, newlines) is ignored everywhere.
  *
- * Examples:
- *   \x. x                         -- identity
- *   \x y. x                       -- constant (K combinator)
- *   (\x. x) y                     -- application of identity to y
- *   \f x. f (f x)                 -- Church numeral 2
- *   (\x. x x) (\x. x x)          -- Omega (non-terminating)
+ * Examples: \x. x -- identity \x y. x -- constant (K combinator) (\x. x) y -- application of identity to y \f x. f (f
+ * x) -- Church numeral 2 (\x. x x) (\x. x x) -- Omega (non-terminating)
  *
  * ─────────────────────────────────────────────────────────────
  */
@@ -34,24 +27,25 @@ object Parser:
 
   private enum Token:
     case TIdent(name: String)
-    case TLambda            // '\'
-    case TDot               // '.'
-    case TLParen            // '('
-    case TRParen            // ')'
+    case TLambda // '\'
+    case TDot    // '.'
+    case TLParen // '('
+    case TRParen // ')'
 
   import Token.*
 
   // ── Public API ───────────────────────────────────────────────
 
-  /** Parse a string into a [[Term]].
+  /**
+   * Parse a string into a [[Term]].
    *
-   *  @throws ParseError if the input is not a valid term.
+   * @throws ParseError
+   *   if the input is not a valid term.
    */
   def parse(input: String): Term =
-    val tokens = tokenize(input)
+    val tokens            = tokenize(input)
     val (term, remaining) = parseTerm(tokens)
-    if remaining.nonEmpty then
-      throw ParseError(s"Unexpected trailing tokens: ${remaining.mkString(" ")}")
+    if remaining.nonEmpty then throw ParseError(s"Unexpected trailing tokens: ${remaining.mkString(" ")}")
     term
 
   /** Wraps a parse failure with a readable message. */
@@ -62,12 +56,12 @@ object Parser:
   private def tokenize(input: String): List[Token] =
     def go(chars: List[Char]): List[Token] =
       chars match
-        case Nil                          => Nil
-        case c :: rest if c.isWhitespace  => go(rest)
-        case '\\' :: rest                 => TLambda :: go(rest)
-        case '.'  :: rest                 => TDot    :: go(rest)
-        case '('  :: rest                 => TLParen :: go(rest)
-        case ')'  :: rest                 => TRParen :: go(rest)
+        case Nil                         => Nil
+        case c :: rest if c.isWhitespace => go(rest)
+        case '\\' :: rest                => TLambda :: go(rest)
+        case '.' :: rest                 => TDot :: go(rest)
+        case '(' :: rest                 => TLParen :: go(rest)
+        case ')' :: rest                 => TRParen :: go(rest)
         case c :: _ if isIdentStart(c) =>
           val (word, rest) = chars.span(isIdentPart)
           TIdent(word.mkString) :: go(rest)
@@ -86,18 +80,17 @@ object Parser:
       case TLambda :: _ => parseAbs(tokens)
       case _            => parseApp(tokens)
 
-  /** abs ::= '\' ident+ '.' term
+  /**
+   * abs ::= '\' ident+ '.' term
    *
-   *  Multi-parameter sugar is desugared right-to-left:
-   *    \x y z. body  →  Abs("x", Abs("y", Abs("z", body)))
+   * Multi-parameter sugar is desugared right-to-left: \x y z. body → Abs("x", Abs("y", Abs("z", body)))
    */
   private def parseAbs(tokens: List[Token]): (Term, List[Token]) =
     tokens match
       case TLambda :: rest =>
         // Collect one or more parameter names before the dot
         val (params, afterParams) = collectParams(rest)
-        if params.isEmpty then
-          throw ParseError("Expected at least one parameter name after '\\'")
+        if params.isEmpty then throw ParseError("Expected at least one parameter name after '\\'")
         afterParams match
           case TDot :: afterDot =>
             val (body, remaining) = parseTerm(afterDot)
@@ -105,14 +98,13 @@ object Parser:
             val term = params.foldRight(body)((p, acc) => Abs(p, acc))
             (term, remaining)
           case _ =>
-            throw ParseError(
-              s"Expected '.' after parameter list, got: ${afterParams.headOption}"
-            )
+            throw ParseError(s"Expected '.' after parameter list, got: ${afterParams.headOption}")
       case _ =>
         throw ParseError(s"Expected '\\' to start abstraction, got: ${tokens.headOption}")
 
-  /** Consume consecutive TIdent tokens as parameter names (stops at TDot or other).
-   *  Uses an accumulator so the recursion is tail-recursive.
+  /**
+   * Consume consecutive TIdent tokens as parameter names (stops at TDot or other). Uses an accumulator so the recursion
+   * is tail-recursive.
    */
   private def collectParams(tokens: List[Token]): (List[String], List[Token]) =
     @annotation.tailrec
@@ -122,10 +114,10 @@ object Parser:
         case _                    => (acc.reverse, tokens)
     go(tokens, Nil)
 
-  /** app ::= atom { atom }   (left-associative)
+  /**
+   * app ::= atom { atom } (left-associative)
    *
-   *  We parse one mandatory atom then greedily consume more,
-   *  folding left into nested [[App]] nodes.
+   * We parse one mandatory atom then greedily consume more, folding left into nested [[App]] nodes.
    */
   private def parseApp(tokens: List[Token]): (Term, List[Token]) =
     val (first, rest) = parseAtom(tokens)
@@ -150,9 +142,7 @@ object Parser:
         val (inner, afterInner) = parseTerm(rest)
         afterInner match
           case TRParen :: tail => (inner, tail)
-          case _               =>
-            throw ParseError(
-              s"Expected closing ')', got: ${afterInner.headOption}"
-            )
+          case _ =>
+            throw ParseError(s"Expected closing ')', got: ${afterInner.headOption}")
       case other =>
         throw ParseError(s"Expected a variable or '(', got: ${other.headOption}")

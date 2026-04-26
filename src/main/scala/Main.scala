@@ -1,19 +1,14 @@
 package lambda
 
-/** Interactive REPL for the lambda calculus interpreter.
+/**
+ * Interactive REPL for the lambda calculus interpreter.
  *
- *  Usage: sbt run
+ * Usage: sbt run
  *
- *  Commands:
- *    <term>              -- parse and evaluate using current strategy and step limit
- *    :strategy normal    -- switch to normal order (default)
- *    :strategy applicative
- *    :strategy cbv       -- call-by-value
- *    :steps <n>          -- set the step limit (default: 1000)
- *    :free <term>        -- show free variables of a term without evaluating
- *    :parse <term>       -- show the parsed AST without evaluating
- *    :help               -- show this help
- *    :quit               -- exit
+ * Commands: <term> -- parse and evaluate using current strategy and step limit :strategy normal -- switch to normal
+ * order (default) :strategy applicative :strategy cbv -- call-by-value :steps <n> -- set the step limit (default: 1000)
+ * :free <term> -- show free variables of a term without evaluating :parse <term> -- show the parsed AST without
+ * evaluating :help -- show this help :quit -- exit
  */
 object Main:
 
@@ -30,9 +25,7 @@ object Main:
     print(s"[${strategyName(strategy)}, steps=$maxSteps] > ")
     val line = scala.io.StdIn.readLine()
 
-    if line == null then
-      // EOF (e.g. piped input ended)
-      println("\nBye!")
+    if line == null then println("\nBye!")
     else
       line.trim match
 
@@ -85,12 +78,14 @@ object Main:
   private def runEval(input: String, strategy: Strategy, maxSteps: Int): Unit =
     try
       val term   = Parser.parse(input)
-      val result = Reduction.evaluate(term, strategy, maxSteps)
-      println(s"  = ${pretty(result.term)}")
-      if result.normalFormReached then
-        println(s"  (normal form reached in ${result.steps} step${plural(result.steps)})")
-      else
-        println(s"  (stopped after ${result.steps} step${plural(result.steps)} — step limit reached, not a normal form)")
+      val result = Evaluator.evaluate(term, strategy, maxSteps)
+      result match
+        case EvalResult.Done(t, steps) =>
+          println(s"  = ${pretty(t)}")
+          println(s"  (normal form reached in $steps step${plural(steps)})")
+        case EvalResult.StepLimitReached(t, steps) =>
+          println(s"  = ${pretty(t)}")
+          println(s"  (stopped after $steps step${plural(steps)} — step limit reached, not a normal form)")
     catch
       case Parser.ParseError(msg) => println(s"  Parse error: $msg")
       case e: Exception           => println(s"  Error: ${e.getMessage}")
@@ -98,7 +93,7 @@ object Main:
   private def runFreeVars(input: String): Unit =
     try
       val term = Parser.parse(input)
-      val fv   = FreeVars.freeVars(term)
+      val fv   = Term.freeVars(term)
       if fv.isEmpty then println("  Free variables: (none)")
       else println(s"  Free variables: ${fv.toSeq.sorted.mkString(", ")}")
     catch
@@ -115,12 +110,11 @@ object Main:
 
   // ── Pretty printer ────────────────────────────────────────────
 
-  /** Print a Term back as human-readable lambda syntax. */
   def pretty(term: Term): String =
     term match
-      case Var(name)       => name
+      case Var(name)        => name
       case Abs(param, body) => s"\\$param. ${pretty(body)}"
-      case App(func, arg)  =>
+      case App(func, arg) =>
         val lhs = func match
           case Abs(_, _) => s"(${pretty(func)})"
           case _         => pretty(func)
